@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkrybGem</title>
+<style>
+  :root {
+    --bg: #f3efe6;
+    --panel: #fffaf2;
+    --line: #d8cdb9;
+    --text: #2f261c;
+    --muted: #6d6255;
+    --accent: #166534;
+    --accent-soft: #d1fae5;
+    --danger: #991b1b;
+    --danger-soft: #fee2e2;
+    --shadow: rgba(47, 38, 28, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Georgia, "Times New Roman", serif;
+    background:
+      radial-gradient(circle at top, rgba(255, 250, 242, 0.95), rgba(243, 239, 230, 1) 55%),
+      linear-gradient(180deg, #f8f4eb 0%, #efe7d8 100%);
+    color: var(--text);
+    display: grid;
+    place-items: center;
+    padding: 24px;
+  }
+
+  .app {
+    width: min(100%, 760px);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    padding: 28px;
+    box-shadow: 0 20px 60px var(--shadow);
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(2rem, 4vw, 3rem);
+  }
+
+  .lead {
+    margin: 0 0 24px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  button {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 12px 18px;
+    font: inherit;
+    font-weight: 700;
+    background: white;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  button.primary {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(22, 101, 52, 0.2);
+  }
+
+  button.primary.recording {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: rgba(153, 27, 27, 0.2);
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .status {
+    margin-left: auto;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: #f6efe3;
+    color: var(--muted);
+    border: 1px solid var(--line);
+  }
+
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+    background: white;
+  }
+
+  label {
+    display: block;
+    padding: 14px 16px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--line);
+    background: #fcf8f1;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 260px;
+    border: 0;
+    resize: vertical;
+    padding: 16px;
+    font: inherit;
+    line-height: 1.6;
+    color: var(--text);
+    background: transparent;
+  }
+
+  .note {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .error {
+    color: var(--danger);
+  }
+<\/style>
+</head>
+<body>
+  <main class="app">
+    <h1>SkrybGem</h1>
+    <p class="lead">Nagraj krótką wypowiedź, odbierz poprawiony tekst, popraw go ręcznie i skopiuj.</p>
+
+    <section class="toolbar">
+      <button id="recordButton" class="primary" type="button">Start nagrywania</button>
+      <button id="copyButton" type="button">Kopiuj tekst</button>
+      <div id="status" class="status">Gotowe</div>
+    </section>
+
+    <section class="panel">
+      <label for="result">Finalny tekst</label>
+      <textarea id="result" placeholder="Tutaj pojawi się poprawiony tekst po zatrzymaniu nagrania."></textarea>
+    </section>
+
+    <p id="note" class="note">Milestone 0.5 uruchamia minimalny przepływ produktu: nagrywanie, przetwarzanie, edycja i kopiowanie.</p>
+  </main>
+
+<script>
+const recordButton = document.getElementById("recordButton");
+const copyButton = document.getElementById("copyButton");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+const noteEl = document.getElementById("note");
+
+let mediaRecorder = null;
+let stream = null;
+let chunks = [];
+let recording = false;
+let processing = false;
+
+function setStatus(text, isError = false) {
+  statusEl.textContent = text;
+  noteEl.classList.toggle("error", isError);
+  if (isError) {
+    noteEl.textContent = text;
+  } else {
+    noteEl.textContent = "Milestone 0.5 uruchamia minimalny przepływ produktu: nagrywanie, przetwarzanie, edycja i kopiowanie.";
+  }
+}
+
+function updateControls() {
+  recordButton.disabled = processing;
+  copyButton.disabled = !resultEl.value.trim();
+  recordButton.textContent = recording ? "Stop" : "Start nagrywania";
+  recordButton.classList.toggle("recording", recording);
+}
+
+async function ensureStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error("Ta przeglądarka nie obsługuje mikrofonu.");
+  }
+  if (!stream) {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
+  return stream;
+}
+
+async function startRecording() {
+  try {
+    const activeStream = await ensureStream();
+    chunks = [];
+    mediaRecorder = new MediaRecorder(activeStream);
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+    mediaRecorder.onstop = () => {
+      void sendRecording();
+    };
+    mediaRecorder.start();
+    recording = true;
+    setStatus("Nagrywanie...");
+    updateControls();
+  } catch (error) {
+    setStatus(error.message || "Nie udało się uzyskać dostępu do mikrofonu.", true);
+  }
+}
+
+function stopRecording() {
+  if (!mediaRecorder) {
+    return;
+  }
+  recording = false;
+  processing = true;
+  setStatus("Przetwarzanie...");
+  updateControls();
+  mediaRecorder.stop();
+}
+
+async function sendRecording() {
+  try {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    const audioBase64 = btoa(binary);
+
+    const response = await fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio_base64: audioBase64 })
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Nie udało się przetworzyć nagrania.");
+    }
+
+    resultEl.value = payload.text;
+    setStatus("Gotowe");
+  } catch (error) {
+    setStatus(error.message || "Nie udało się przetworzyć nagrania.", true);
+  } finally {
+    processing = false;
+    updateControls();
+  }
+}
+
+recordButton.addEventListener("click", () => {
+  if (processing) {
+    return;
+  }
+  if (recording) {
+    stopRecording();
+  } else {
+    void startRecording();
+  }
+});
+
+copyButton.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(resultEl.value);
+    setStatus("Skopiowano tekst.");
+  } catch (_error) {
+    setStatus("Nie udało się skopiować tekstu.", true);
+  }
+});
+
+resultEl.addEventListener("input", updateControls);
+updateControls();
+</script>
+</body>
+</html>
