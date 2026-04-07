@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import base64
 import binascii
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+from .config import load_app_config
 
 
 SYSTEM_PROMPT = (
@@ -176,7 +177,7 @@ class TranscriptionService:
 
 
 def build_transcription_service() -> TranscriptionService:
-    model_path = os.environ.get("MODEL_PATH", "").strip()
+    model_path = load_app_config().model_path
     try:
         client = LiteRTModelClient(model_path)
     except ModelUnavailableError as exc:

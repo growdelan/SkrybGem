@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 
+from .config import load_app_config
 from .transcription import (
     InvalidRequestError,
     ModelUnavailableError,
@@ -124,10 +124,9 @@ def create_server(
 
 
 def main() -> None:
-    host = os.environ.get("SKRYBGEM_HOST", "127.0.0.1")
-    port = int(os.environ.get("SKRYBGEM_PORT", "8000"))
-    server = create_server(host, port)
-    print(f"SkrybGem działa na http://{host}:{port}")
+    config = load_app_config()
+    server = create_server(config.host, config.port)
+    print(f"SkrybGem działa na http://{config.host}:{config.port}")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

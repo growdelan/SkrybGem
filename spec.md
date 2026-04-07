@@ -116,6 +116,10 @@ Każda decyzja powinna zawierać:
   Uzasadnienie: Ścieżka audio LiteRT-LM jest najbezpieczniejsza dla jawnego formatu wejściowego, a aplikacja ma wspierać tylko format generowany przez własny frontend.
   Konsekwencje: Backend waliduje podstawową strukturę WAV i odrzuca inne formaty jako błąd wejścia użytkownika.
 
+- Decyzja: Konfiguracja uruchomieniowa aplikacji jest ładowana z pliku `.env` przy użyciu `python-dotenv`.
+  Uzasadnienie: Model, host i port są parametrami środowiskowymi wymaganymi przy starcie i wygodniej utrzymywać je w jednym lokalnym pliku konfiguracyjnym.
+  Konsekwencje: Uruchomienie aplikacji nie wymaga już dopisywania zmiennych środowiskowych do komendy, ale repo musi utrzymywać aktualny przykład zawartości `.env`.
+
 ---
 
 ## Jakość i kryteria akceptacji

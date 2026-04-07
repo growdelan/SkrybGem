@@ -7,19 +7,21 @@ Lokalna aplikacja webowa do dyktowania i odbierania poprawionego tekstu po polsk
 - Python 3.13 zarządzany przez `uv`
 - lokalny plik modelu `.litertlm` zgodny z LiteRT-LM
 
-Przed uruchomieniem ustaw zmienną `MODEL_PATH` wskazującą na lokalny plik modelu.
+Przed uruchomieniem uzupełnij plik `.env` w katalogu projektu.
+
+Domyślne zmienne używane przez aplikację:
+```env
+MODEL_PATH=/pelna/sciezka/do/modelu.litertlm
+SKRYBGEM_HOST=127.0.0.1
+SKRYBGEM_PORT=8000
+```
 
 ## Uruchamianie
 ```bash
-MODEL_PATH=/ścieżka/do/modelu.litertlm uv run python -m skrybgem
+uv run python -m skrybgem
 ```
 
-Domyślnie aplikacja startuje pod adresem `http://127.0.0.1:8000`.
-
-Opcjonalnie można zmienić host i port:
-```bash
-MODEL_PATH=/ścieżka/do/modelu.litertlm SKRYBGEM_PORT=8010 uv run python -m skrybgem
-```
+Domyślnie aplikacja startuje pod adresem ustawionym przez `SKRYBGEM_HOST` i `SKRYBGEM_PORT` z `.env`.
 
 ## Testy
 ```bash
@@ -27,7 +29,7 @@ uv run python -m unittest discover -s tests -p "test_*.py"
 ```
 
 ## Ręczny smoke test
-1. Ustaw `MODEL_PATH` na lokalny plik `.litertlm`.
+1. Ustaw `MODEL_PATH` w `.env` na lokalny plik `.litertlm`.
 2. Uruchom aplikację komendą z sekcji uruchamiania.
 3. Otwórz adres pokazany w terminalu.
 4. Zezwól przeglądarce na dostęp do mikrofonu.
