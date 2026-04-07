@@ -9,6 +9,9 @@ Lokalna aplikacja webowa do dyktowania i odbierania poprawionego tekstu po polsk
 
 Przed uruchomieniem uzupełnij plik `.env` w katalogu projektu.
 
+Model można pobrać stąd:
+- [litert-community/gemma-4-E2B-it-litert-lm](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/tree/main)
+
 Domyślne zmienne używane przez aplikację:
 ```env
 MODEL_PATH=/pelna/sciezka/do/modelu.litertlm
