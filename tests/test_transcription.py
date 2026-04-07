@@ -85,6 +85,12 @@ class TranscriptionServiceTest(unittest.TestCase):
 
 
 class NormalizeFinalTextTest(unittest.TestCase):
+    def test_strips_litert_control_tokens(self):
+        self.assertEqual(
+            normalize_final_text('<|"|>To jest moje nagrywanie, chciałbym tylko tyle powiedzieć.<|"|>'),
+            "To jest moje nagrywanie, chciałbym tylko tyle powiedzieć.",
+        )
+
     def test_rejects_conversational_prefix(self):
         with self.assertRaises(ProcessingError):
             normalize_final_text("Oto poprawiona transkrypcja: To jest test.")

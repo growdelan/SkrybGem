@@ -25,6 +25,7 @@ CONVERSATIONAL_PREFIX_RE = re.compile(
     r"^\s*(oto|poniżej|jasne|pewnie|oczywiście|transkrypcja|poprawiona transkrypcja)\b",
     re.IGNORECASE,
 )
+CONTROL_TOKEN_RE = re.compile(r'<\|[^|>]*\|>')
 
 
 class TranscriptionError(Exception):
@@ -69,7 +70,8 @@ def validate_wav_audio(audio_bytes: bytes) -> None:
 
 def normalize_final_text(text: str) -> str:
     """Porządkuje wynik modelu i odrzuca odpowiedzi konwersacyjne."""
-    normalized = " ".join(text.strip().split())
+    normalized = CONTROL_TOKEN_RE.sub(" ", text)
+    normalized = " ".join(normalized.strip().split())
     normalized = normalized.strip("\"' \n\t")
     if not normalized:
         raise ProcessingError("Model nie zwrócił finalnego tekstu.")

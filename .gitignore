@@ -10,4 +10,5 @@ wheels/
 .venv
 
 # Local environment files
+.env
 .env.local
