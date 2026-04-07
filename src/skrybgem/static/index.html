@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SkrybGem</title>
+<style>
+  :root {
+    --bg: #f3efe6;
+    --panel: #fffaf2;
+    --line: #d8cdb9;
+    --text: #2f261c;
+    --muted: #6d6255;
+    --accent: #166534;
+    --accent-soft: #d1fae5;
+    --danger: #991b1b;
+    --danger-soft: #fee2e2;
+    --shadow: rgba(47, 38, 28, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: Georgia, "Times New Roman", serif;
+    background:
+      radial-gradient(circle at top, rgba(255, 250, 242, 0.95), rgba(243, 239, 230, 1) 55%),
+      linear-gradient(180deg, #f8f4eb 0%, #efe7d8 100%);
+    color: var(--text);
+    display: grid;
+    place-items: center;
+    padding: 24px;
+  }
+
+  .app {
+    width: min(100%, 760px);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    padding: 28px;
+    box-shadow: 0 20px 60px var(--shadow);
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: clamp(2rem, 4vw, 3rem);
+  }
+
+  .lead {
+    margin: 0 0 24px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  button {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 12px 18px;
+    font: inherit;
+    font-weight: 700;
+    background: white;
+    color: var(--text);
+    cursor: pointer;
+  }
+
+  button.primary {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: rgba(22, 101, 52, 0.2);
+  }
+
+  button.primary.recording {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: rgba(153, 27, 27, 0.2);
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .status {
+    margin-left: auto;
+    padding: 10px 14px;
+    border-radius: 999px;
+    background: #f6efe3;
+    color: var(--muted);
+    border: 1px solid var(--line);
+  }
+
+  .panel {
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    overflow: hidden;
+    background: white;
+  }
+
+  label {
+    display: block;
+    padding: 14px 16px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--line);
+    background: #fcf8f1;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 260px;
+    border: 0;
+    resize: vertical;
+    padding: 16px;
+    font: inherit;
+    line-height: 1.6;
+    color: var(--text);
+    background: transparent;
+  }
+
+  .note {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .error {
+    color: var(--danger);
+  }
+</style>
+</head>
+<body>
+  <main class="app">
+    <h1>SkrybGem</h1>
+    <p class="lead">Nagraj krótką wypowiedź, odbierz poprawiony tekst, popraw go ręcznie i skopiuj.</p>
+
+    <section class="toolbar">
+      <button id="recordButton" class="primary" type="button">Start nagrywania</button>
+      <button id="copyButton" type="button">Kopiuj tekst</button>
+      <div id="status" class="status">Gotowe</div>
+    </section>
+
+    <section class="panel">
+      <label for="result">Finalny tekst</label>
+      <textarea id="result" placeholder="Tutaj pojawi się poprawiony tekst po zatrzymaniu nagrania."></textarea>
+    </section>
+
+    <p id="note" class="note">Milestone 0.5 uruchamia minimalny przepływ produktu: nagrywanie, przetwarzanie, edycja i kopiowanie.</p>
+  </main>
+
+<script>
+const recordButton = document.getElementById("recordButton");
+const copyButton = document.getElementById("copyButton");
+const statusEl = document.getElementById("status");
+const resultEl = document.getElementById("result");
+const noteEl = document.getElementById("note");
+
+let mediaRecorder = null;
+let stream = null;
+let chunks = [];
+let uiState = "gotowe";
+
+function isRecording() {
+  return uiState === "nagrywanie";
+}
+
+function isProcessing() {
+  return uiState === "przetwarzanie";
+}
+
+function setStatus(text, isError = false) {
+  statusEl.textContent = text;
+  noteEl.classList.toggle("error", isError);
+  if (isError) {
+    noteEl.textContent = text;
+  } else {
+    noteEl.textContent = "Lokalna transkrypcja działa na jednym ekranie: nagrywanie, przetwarzanie, edycja i kopiowanie.";
+  }
+}
+
+function updateControls() {
+  recordButton.disabled = isProcessing();
+  copyButton.disabled = !resultEl.value.trim();
+  recordButton.textContent = isRecording() ? "Stop" : "Start nagrywania";
+  recordButton.classList.toggle("recording", isRecording());
+}
+
+function setUiState(state, message, isError = false) {
+  uiState = state;
+  setStatus(message, isError);
+  updateControls();
+}
+
+async function ensureStream() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error("Ta przeglądarka nie obsługuje mikrofonu.");
+  }
+  if (!window.MediaRecorder) {
+    throw new Error("Ta przeglądarka nie obsługuje nagrywania audio.");
+  }
+  if (!stream) {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
+  return stream;
+}
+
+function getRecorderOptions() {
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) {
+    return undefined;
+  }
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+  ];
+  for (const mimeType of candidates) {
+    if (MediaRecorder.isTypeSupported(mimeType)) {
+      return { mimeType };
+    }
+  }
+  return undefined;
+}
+
+function encodeWav(audioBuffer, sampleRate = 16000) {
+  const channelData = audioBuffer.numberOfChannels === 1
+    ? audioBuffer.getChannelData(0)
+    : mixToMono(audioBuffer);
+  const resampled = resampleLinear(channelData, audioBuffer.sampleRate, sampleRate);
+  const wavBuffer = new ArrayBuffer(44 + resampled.length * 2);
+  const view = new DataView(wavBuffer);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + resampled.length * 2, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, resampled.length * 2, true);
+
+  for (let i = 0; i < resampled.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, resampled[i]));
+    view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+
+  return wavBuffer;
+}
+
+function writeAscii(view, offset, text) {
+  for (let index = 0; index < text.length; index += 1) {
+    view.setUint8(offset + index, text.charCodeAt(index));
+  }
+}
+
+function mixToMono(audioBuffer) {
+  const length = audioBuffer.length;
+  const output = new Float32Array(length);
+  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
+    const data = audioBuffer.getChannelData(channel);
+    for (let index = 0; index < length; index += 1) {
+      output[index] += data[index] / audioBuffer.numberOfChannels;
+    }
+  }
+  return output;
+}
+
+function resampleLinear(source, inputRate, outputRate) {
+  if (inputRate === outputRate) {
+    return source;
+  }
+  const ratio = inputRate / outputRate;
+  const outputLength = Math.max(1, Math.round(source.length / ratio));
+  const output = new Float32Array(outputLength);
+  for (let index = 0; index < outputLength; index += 1) {
+    const position = index * ratio;
+    const left = Math.floor(position);
+    const right = Math.min(left + 1, source.length - 1);
+    const weight = position - left;
+    output[index] = source[left] * (1 - weight) + source[right] * weight;
+  }
+  return output;
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+async function convertBlobToWavBase64(blob) {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) {
+    throw new Error("Ta przeglądarka nie obsługuje konwersji nagrania do WAV.");
+  }
+
+  const audioContext = new AudioContextCtor();
+  try {
+    const buffer = await blob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(buffer.slice(0));
+    const wavBuffer = encodeWav(audioBuffer);
+    return arrayBufferToBase64(wavBuffer);
+  } catch (_error) {
+    throw new Error("Nie udało się przygotować nagrania do wysłania.");
+  } finally {
+    await audioContext.close();
+  }
+}
+
+async function startRecording() {
+  try {
+    const activeStream = await ensureStream();
+    chunks = [];
+    mediaRecorder = new MediaRecorder(activeStream, getRecorderOptions());
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    };
+    mediaRecorder.onstop = () => {
+      void sendRecording();
+    };
+    mediaRecorder.start();
+    setUiState("nagrywanie", "Nagrywanie...");
+  } catch (error) {
+    setUiState("błąd", error.message || "Nie udało się uzyskać dostępu do mikrofonu.", true);
+  }
+}
+
+function stopRecording() {
+  if (!mediaRecorder) {
+    return;
+  }
+  setUiState("przetwarzanie", "Przetwarzanie...");
+  mediaRecorder.stop();
+}
+
+async function sendRecording() {
+  try {
+    if (!chunks.length) {
+      throw new Error("Nagranie jest puste albo zbyt krótkie.");
+    }
+
+    const mimeType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : "audio/webm";
+    const blob = new Blob(chunks, { type: mimeType });
+    const audioBase64 = await convertBlobToWavBase64(blob);
+
+    const response = await fetch("/api/transcribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ audio_base64: audioBase64 })
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error || "Nie udało się przetworzyć nagrania.");
+    }
+
+    resultEl.value = payload.text;
+    setUiState("wynik", "Wynik gotowy");
+  } catch (error) {
+    setUiState("błąd", error.message || "Nie udało się przetworzyć nagrania.", true);
+  } finally {
+    mediaRecorder = null;
+    updateControls();
+  }
+}
+
+recordButton.addEventListener("click", () => {
+  if (isProcessing()) {
+    return;
+  }
+  if (isRecording()) {
+    stopRecording();
+  } else {
+    void startRecording();
+  }
+});
+
+copyButton.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(resultEl.value);
+    setUiState("wynik", "Skopiowano tekst.");
+  } catch (_error) {
+    setUiState("błąd", "Nie udało się skopiować tekstu.", true);
+  }
+});
+
+resultEl.addEventListener("input", updateControls);
+setUiState("gotowe", "Gotowe");
+updateControls();
+</script>
+</body>
+</html>
