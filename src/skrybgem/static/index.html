@@ -167,8 +167,15 @@ const noteEl = document.getElementById("note");
 let mediaRecorder = null;
 let stream = null;
 let chunks = [];
-let recording = false;
-let processing = false;
+let uiState = "gotowe";
+
+function isRecording() {
+  return uiState === "nagrywanie";
+}
+
+function isProcessing() {
+  return uiState === "przetwarzanie";
+}
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
@@ -176,20 +183,29 @@ function setStatus(text, isError = false) {
   if (isError) {
     noteEl.textContent = text;
   } else {
-    noteEl.textContent = "Milestone 0.5 uruchamia minimalny przepływ produktu: nagrywanie, przetwarzanie, edycja i kopiowanie.";
+    noteEl.textContent = "Lokalna transkrypcja działa na jednym ekranie: nagrywanie, przetwarzanie, edycja i kopiowanie.";
   }
 }
 
 function updateControls() {
-  recordButton.disabled = processing;
+  recordButton.disabled = isProcessing();
   copyButton.disabled = !resultEl.value.trim();
-  recordButton.textContent = recording ? "Stop" : "Start nagrywania";
-  recordButton.classList.toggle("recording", recording);
+  recordButton.textContent = isRecording() ? "Stop" : "Start nagrywania";
+  recordButton.classList.toggle("recording", isRecording());
+}
+
+function setUiState(state, message, isError = false) {
+  uiState = state;
+  setStatus(message, isError);
+  updateControls();
 }
 
 async function ensureStream() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     throw new Error("Ta przeglądarka nie obsługuje mikrofonu.");
+  }
+  if (!window.MediaRecorder) {
+    throw new Error("Ta przeglądarka nie obsługuje nagrywania audio.");
   }
   if (!stream) {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -197,11 +213,121 @@ async function ensureStream() {
   return stream;
 }
 
+function getRecorderOptions() {
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) {
+    return undefined;
+  }
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+  ];
+  for (const mimeType of candidates) {
+    if (MediaRecorder.isTypeSupported(mimeType)) {
+      return { mimeType };
+    }
+  }
+  return undefined;
+}
+
+function encodeWav(audioBuffer, sampleRate = 16000) {
+  const channelData = audioBuffer.numberOfChannels === 1
+    ? audioBuffer.getChannelData(0)
+    : mixToMono(audioBuffer);
+  const resampled = resampleLinear(channelData, audioBuffer.sampleRate, sampleRate);
+  const wavBuffer = new ArrayBuffer(44 + resampled.length * 2);
+  const view = new DataView(wavBuffer);
+
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + resampled.length * 2, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, resampled.length * 2, true);
+
+  for (let i = 0; i < resampled.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, resampled[i]));
+    view.setInt16(44 + i * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+  }
+
+  return wavBuffer;
+}
+
+function writeAscii(view, offset, text) {
+  for (let index = 0; index < text.length; index += 1) {
+    view.setUint8(offset + index, text.charCodeAt(index));
+  }
+}
+
+function mixToMono(audioBuffer) {
+  const length = audioBuffer.length;
+  const output = new Float32Array(length);
+  for (let channel = 0; channel < audioBuffer.numberOfChannels; channel += 1) {
+    const data = audioBuffer.getChannelData(channel);
+    for (let index = 0; index < length; index += 1) {
+      output[index] += data[index] / audioBuffer.numberOfChannels;
+    }
+  }
+  return output;
+}
+
+function resampleLinear(source, inputRate, outputRate) {
+  if (inputRate === outputRate) {
+    return source;
+  }
+  const ratio = inputRate / outputRate;
+  const outputLength = Math.max(1, Math.round(source.length / ratio));
+  const output = new Float32Array(outputLength);
+  for (let index = 0; index < outputLength; index += 1) {
+    const position = index * ratio;
+    const left = Math.floor(position);
+    const right = Math.min(left + 1, source.length - 1);
+    const weight = position - left;
+    output[index] = source[left] * (1 - weight) + source[right] * weight;
+  }
+  return output;
+}
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte);
+  });
+  return btoa(binary);
+}
+
+async function convertBlobToWavBase64(blob) {
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) {
+    throw new Error("Ta przeglądarka nie obsługuje konwersji nagrania do WAV.");
+  }
+
+  const audioContext = new AudioContextCtor();
+  try {
+    const buffer = await blob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(buffer.slice(0));
+    const wavBuffer = encodeWav(audioBuffer);
+    return arrayBufferToBase64(wavBuffer);
+  } catch (_error) {
+    throw new Error("Nie udało się przygotować nagrania do wysłania.");
+  } finally {
+    await audioContext.close();
+  }
+}
+
 async function startRecording() {
   try {
     const activeStream = await ensureStream();
     chunks = [];
-    mediaRecorder = new MediaRecorder(activeStream);
+    mediaRecorder = new MediaRecorder(activeStream, getRecorderOptions());
     mediaRecorder.ondataavailable = (event) => {
       if (event.data && event.data.size > 0) {
         chunks.push(event.data);
@@ -211,11 +337,9 @@ async function startRecording() {
       void sendRecording();
     };
     mediaRecorder.start();
-    recording = true;
-    setStatus("Nagrywanie...");
-    updateControls();
+    setUiState("nagrywanie", "Nagrywanie...");
   } catch (error) {
-    setStatus(error.message || "Nie udało się uzyskać dostępu do mikrofonu.", true);
+    setUiState("błąd", error.message || "Nie udało się uzyskać dostępu do mikrofonu.", true);
   }
 }
 
@@ -223,23 +347,19 @@ function stopRecording() {
   if (!mediaRecorder) {
     return;
   }
-  recording = false;
-  processing = true;
-  setStatus("Przetwarzanie...");
-  updateControls();
+  setUiState("przetwarzanie", "Przetwarzanie...");
   mediaRecorder.stop();
 }
 
 async function sendRecording() {
   try {
-    const blob = new Blob(chunks, { type: "audio/webm" });
-    const buffer = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    bytes.forEach((byte) => {
-      binary += String.fromCharCode(byte);
-    });
-    const audioBase64 = btoa(binary);
+    if (!chunks.length) {
+      throw new Error("Nagranie jest puste albo zbyt krótkie.");
+    }
+
+    const mimeType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : "audio/webm";
+    const blob = new Blob(chunks, { type: mimeType });
+    const audioBase64 = await convertBlobToWavBase64(blob);
 
     const response = await fetch("/api/transcribe", {
       method: "POST",
@@ -253,20 +373,20 @@ async function sendRecording() {
     }
 
     resultEl.value = payload.text;
-    setStatus("Gotowe");
+    setUiState("wynik", "Wynik gotowy");
   } catch (error) {
-    setStatus(error.message || "Nie udało się przetworzyć nagrania.", true);
+    setUiState("błąd", error.message || "Nie udało się przetworzyć nagrania.", true);
   } finally {
-    processing = false;
+    mediaRecorder = null;
     updateControls();
   }
 }
 
 recordButton.addEventListener("click", () => {
-  if (processing) {
+  if (isProcessing()) {
     return;
   }
-  if (recording) {
+  if (isRecording()) {
     stopRecording();
   } else {
     void startRecording();
@@ -276,13 +396,14 @@ recordButton.addEventListener("click", () => {
 copyButton.addEventListener("click", async () => {
   try {
     await navigator.clipboard.writeText(resultEl.value);
-    setStatus("Skopiowano tekst.");
+    setUiState("wynik", "Skopiowano tekst.");
   } catch (_error) {
-    setStatus("Nie udało się skopiować tekstu.", true);
+    setUiState("błąd", "Nie udało się skopiować tekstu.", true);
   }
 });
 
 resultEl.addEventListener("input", updateControls);
+setUiState("gotowe", "Gotowe");
 updateControls();
 </script>
 </body>

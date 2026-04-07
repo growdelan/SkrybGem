@@ -37,7 +37,7 @@ Uwagi:
 
 ---
 
-## Milestone 1: Stabilizacja podstawowego przepływu użytkownika (planned)
+## Milestone 1: Stabilizacja podstawowego przepływu użytkownika (done)
 
 Cel:
 - domknąć podstawowy przepływ użytkownika opisany w PRD tak, aby był przewidywalny i odporny na podstawowe błędy wejścia
@@ -58,10 +58,12 @@ Zakres:
 
 Uwagi:
 - milestone nie rozszerza produktu o historię, upload plików ani wielojęzyczność
+- wdrożono kontrolowane mapowanie błędów `400/422/503/500` oraz komunikaty UI dla stanów i błędów nagrywania
+- rozszerzono testy automatyczne o scenariusze negatywne i graniczne dla backendu
 
 ---
 
-## Milestone 2: Jakość wyniku i finalizacja tekstu (planned)
+## Milestone 2: Jakość wyniku i finalizacja tekstu (done)
 
 Cel:
 - podnieść jakość finalnego tekstu do poziomu zgodnego z obietnicą produktu dla polskiego dyktowania
@@ -82,3 +84,5 @@ Zakres:
 
 Uwagi:
 - milestone nie dodaje historii sesji ani trwałego przechowywania danych
+- bootstrapowy wynik stały został zastąpiony integracją LiteRT-LM z wymuszeniem pojedynczego finalnego tekstu
+- frontend przygotowuje WAV przed wysyłką, a wynik pozostaje edytowalny i kopiowalny w jednym widoku

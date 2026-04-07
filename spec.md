@@ -81,8 +81,8 @@ Lista kluczowych komponentów technicznych i ich odpowiedzialności.
 
 - Interfejs webowy: rozpoczęcie i zakończenie nagrywania, prezentacja stanów, edycja tekstu, kopiowanie do schowka.
 - Obsługa mikrofonu: pobranie audio od użytkownika w bieżącej sesji.
-- Lokalny backend: przyjęcie żądania przetwarzania, walidacja podstawowych warunków wejścia, zwrot finalnego tekstu lub błędu.
-- Warstwa transkrypcji i korekty: zamiana nagrania na poprawiony tekst.
+- Lokalny backend: przyjęcie żądania przetwarzania, walidacja podstawowych warunków wejścia, zwrot finalnego tekstu lub kontrolowanego błędu HTTP.
+- Warstwa transkrypcji i korekty: zamiana nagrania WAV na poprawiony tekst po polsku.
 - Integracja modelowa: uruchomienie modelu klasy `E2B` przez LiteRT-LM.
 - Testy smoke: potwierdzenie, że minimalny przepływ end-to-end działa dla pierwszej wersji.
 
@@ -108,9 +108,13 @@ Każda decyzja powinna zawierać:
   Uzasadnienie: PRD definiuje jeden wynik końcowy jako podstawowe doświadczenie użytkownika.
   Konsekwencje: Projekt interfejsu i roadmapa skupiają się na jakości finalnego tekstu, edycji i kopiowaniu, a nie na wielowidokowym porównywaniu wyników.
 
-- Decyzja: W Milestone 0.5 warstwa backendowa używa lokalnego, deterministycznego procesora bootstrapowego pod tym samym kontraktem wejścia i wyjścia, który później przejmie integracja modelowa.
-  Uzasadnienie: Roadmapa dla Milestone 0.5 wymaga minimalnego działającego slice'u end-to-end, ale nie precyzuje jeszcze szczegółów wdrożenia LiteRT-LM. Najprostsza decyzja na tym etapie to uruchomić pełny przepływ aplikacji bez rozszerzania zakresu o właściwą integrację modelową.
-  Konsekwencje: Milestone 0.5 dostarcza działający przepływ produktu i smoke test, a pełna integracja modelu klasy `E2B` pozostaje zakresem kolejnych milestone'ów.
+- Decyzja: Bieżąca implementacja v1 używa LiteRT-LM ładowanego przy starcie procesu na podstawie zmiennej środowiskowej `MODEL_PATH`.
+  Uzasadnienie: Milestone 1 i 2 wymagają realnej lokalnej integracji modelowej, a nie dalszego używania bootstrapowego procesora.
+  Konsekwencje: Aplikacja może wystartować bez modelu, ale endpoint transkrypcji zwraca wtedy kontrolowany błąd `503`, dopóki użytkownik nie wskaże poprawnego pliku `.litertlm`.
+
+- Decyzja: Frontend wysyła do backendu nagranie WAV przygotowane lokalnie w przeglądarce.
+  Uzasadnienie: Ścieżka audio LiteRT-LM jest najbezpieczniejsza dla jawnego formatu wejściowego, a aplikacja ma wspierać tylko format generowany przez własny frontend.
+  Konsekwencje: Backend waliduje podstawową strukturę WAV i odrzuca inne formaty jako błąd wejścia użytkownika.
 
 ---
 

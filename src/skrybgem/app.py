@@ -1,4 +1,4 @@
-"""Minimalna aplikacja webowa dla Milestone 0.5."""
+"""Aplikacja webowa SkrybGem."""
 
 from __future__ import annotations
 
@@ -8,7 +8,13 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 
-from .transcription import generate_final_text
+from .transcription import (
+    InvalidRequestError,
+    ModelUnavailableError,
+    ProcessingError,
+    TranscriptionService,
+    build_transcription_service,
+)
 
 
 def load_index_html() -> bytes:
@@ -41,7 +47,7 @@ class AppHandler(BaseHTTPRequestHandler):
         try:
             payload = json.loads(raw_body.decode("utf-8"))
             audio_base64 = payload["audio_base64"]
-            final_text = generate_final_text(audio_base64)
+            final_text = self.server.transcription_service.transcribe_audio(audio_base64)
         except KeyError:
             self._send_json(
                 HTTPStatus.BAD_REQUEST,
@@ -54,10 +60,28 @@ class AppHandler(BaseHTTPRequestHandler):
                 {"error": "Nieprawidłowy format żądania."},
             )
             return
-        except ValueError as exc:
+        except InvalidRequestError as exc:
             self._send_json(
                 HTTPStatus.UNPROCESSABLE_ENTITY,
                 {"error": str(exc)},
+            )
+            return
+        except ModelUnavailableError as exc:
+            self._send_json(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                {"error": str(exc)},
+            )
+            return
+        except ProcessingError as exc:
+            self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": str(exc)},
+            )
+            return
+        except Exception:
+            self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": "Wystąpił nieoczekiwany błąd przetwarzania."},
             )
             return
 
@@ -75,8 +99,28 @@ class AppHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer((host, port), AppHandler)
+class SkrybGemServer(ThreadingHTTPServer):
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        handler_cls: type[BaseHTTPRequestHandler],
+        transcription_service: TranscriptionService,
+    ):
+        self.transcription_service = transcription_service
+        super().__init__(server_address, handler_cls)
+
+    def server_close(self) -> None:
+        self.transcription_service.close()
+        super().server_close()
+
+
+def create_server(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    transcription_service: TranscriptionService | None = None,
+) -> SkrybGemServer:
+    service = transcription_service or build_transcription_service()
+    return SkrybGemServer((host, port), AppHandler, service)
 
 
 def main() -> None:
