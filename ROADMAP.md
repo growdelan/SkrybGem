@@ -9,7 +9,7 @@ Dozwolone statusy:
 
 ---
 
-## Milestone 0.5: Minimal end-to-end slice (planned)
+## Milestone 0.5: Minimal end-to-end slice (done)
 
 Cel:
 - aplikacja uruchamia się lokalnie jako minimalna webowa wersja SkrybGem
@@ -29,6 +29,11 @@ Zakres:
 - minimalna ścieżka przetwarzania prowadząca do finalnego tekstu po korekcie
 - minimalny ekran z wynikiem możliwym do ręcznej edycji i skopiowania
 - smoke test end-to-end dla najprostszego scenariusza sukcesu
+
+Uwagi:
+- zrealizowano bootstrapowy lokalny backend HTTP i prosty frontend webowy
+- Milestone 0.5 używa deterministycznego procesora bootstrapowego pod docelowym kontraktem backendowym
+- po wdrożeniu poprawiono błąd renderowania interfejsu wynikający z nieprawidłowego zamknięcia tagu `style`
 
 ---
 
