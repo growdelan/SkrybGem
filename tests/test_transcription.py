@@ -85,6 +85,14 @@ class TranscriptionServiceTest(unittest.TestCase):
 
 
 class NormalizeFinalTextTest(unittest.TestCase):
+    def test_strips_textual_tool_wrapper(self):
+        self.assertEqual(
+            normalize_final_text(
+                "Return_final_text{final_text: To jest nagrywanie głosu mojej nowej aplikacji. Chciałbym zobaczyć, jak to działa. Dziękuję. }."
+            ),
+            "To jest nagrywanie głosu mojej nowej aplikacji. Chciałbym zobaczyć, jak to działa. Dziękuję.",
+        )
+
     def test_strips_litert_control_tokens(self):
         self.assertEqual(
             normalize_final_text('<|"|>To jest moje nagrywanie, chciałbym tylko tyle powiedzieć.<|"|>'),

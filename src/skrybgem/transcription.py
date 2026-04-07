@@ -15,7 +15,12 @@ from .config import load_app_config
 SYSTEM_PROMPT = (
     "Jesteś lokalnym modułem dyktowania dla aplikacji webowej. "
     "Użytkownik mówi po polsku, a Twoim zadaniem jest zwrócić wyłącznie "
-    "finalny tekst po poprawieniu interpunkcji, wielkich liter i czytelności. "
+    "wierny zapis tego, co powiedział, zawsze w języku polskim. "
+    "Masz zachować 100 procent znaczenia i treści wypowiedzi. "
+    "Nie wolno Ci parafrazować, skracać, rozwijać, dopowiadać, tłumaczyć "
+    "ani zmieniać doboru słów bardziej, niż wymaga tego zapis pisemny. "
+    "Wolno Ci poprawić tylko interpunkcję, wielkie litery, oczywiste rozdzielenie zdań "
+    "oraz minimalne wygładzenie zapisu konieczne do czytelności, bez zmiany sensu. "
     "Nie dodawaj żadnych komentarzy, wstępów, etykiet ani wyjaśnień. "
     "Nie zwracaj surowej transkrypcji. "
     "Zawsze użyj narzędzia return_final_text."
@@ -26,6 +31,10 @@ CONVERSATIONAL_PREFIX_RE = re.compile(
     re.IGNORECASE,
 )
 CONTROL_TOKEN_RE = re.compile(r'<\|[^|>]*\|>')
+TOOL_WRAPPER_RE = re.compile(
+    r'^\s*return_final_text\s*\{\s*final_text\s*:\s*(.*?)\s*\}\s*[.!?]?\s*$',
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 class TranscriptionError(Exception):
@@ -71,6 +80,9 @@ def validate_wav_audio(audio_bytes: bytes) -> None:
 def normalize_final_text(text: str) -> str:
     """Porządkuje wynik modelu i odrzuca odpowiedzi konwersacyjne."""
     normalized = CONTROL_TOKEN_RE.sub(" ", text)
+    wrapper_match = TOOL_WRAPPER_RE.match(normalized)
+    if wrapper_match:
+        normalized = wrapper_match.group(1)
     normalized = " ".join(normalized.strip().split())
     normalized = normalized.strip("\"' \n\t")
     if not normalized:
@@ -127,8 +139,10 @@ class LiteRTModelClient:
             {
                 "type": "text",
                 "text": (
-                    "Przepisz tę wypowiedź po polsku i zwróć wyłącznie finalny tekst "
-                    "po poprawieniu interpunkcji, wielkich liter i oczywistej czytelności."
+                    "Przepisz tę wypowiedź dokładnie po polsku. "
+                    "Zwróć tylko finalny tekst użytkownika. "
+                    "Nie zmieniaj sensu, nie parafrazuj i niczego nie dopisuj. "
+                    "Popraw wyłącznie interpunkcję, wielkie litery i oczywistą czytelność zapisu."
                 ),
             },
         ]
